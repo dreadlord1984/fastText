@@ -7,29 +7,24 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  */
 
-#ifndef FASTTEXT_UTILS_H
-#define FASTTEXT_UTILS_H
+#pragma once
 
 #include <fstream>
 
-#include "real.h"
+#if defined(__clang__) || defined(__GNUC__)
+# define FASTTEXT_DEPRECATED(msg) __attribute__((__deprecated__(msg)))
+#elif defined(_MSC_VER)
+# define FASTTEXT_DEPRECATED(msg) __declspec(deprecated(msg))
+#else
+# define FASTTEXT_DEPRECATED(msg)
+#endif
 
-#define SIGMOID_TABLE_SIZE 512
-#define MAX_SIGMOID 8
-#define LOG_TABLE_SIZE 512
+namespace fasttext {
 
 namespace utils {
-
-  real log(real);
-  real sigmoid(real);
-
-  void initTables();
-  void initSigmoid();
-  void initLog();
-  void freeTables();
 
   int64_t size(std::ifstream&);
   void seek(std::ifstream&, int64_t);
 }
 
-#endif
+}

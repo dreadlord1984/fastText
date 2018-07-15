@@ -9,38 +9,59 @@
 
 #include "model.h"
 
+#include <iostream>
 #include <assert.h>
-
 #include <algorithm>
+#include <stdexcept>
 
-#include "utils.h"
+namespace fasttext {
 
-Model::Model(std::shared_ptr<Matrix> wi,
-             std::shared_ptr<Matrix> wo,
-             std::shared_ptr<Args> args,
-             int32_t seed)
-  : hidden_(args->dim), output_(wo->m_), grad_(args->dim), rng(seed)
-{
+constexpr int64_t SIGMOID_TABLE_SIZE = 512;
+constexpr int64_t MAX_SIGMOID = 8;
+constexpr int64_t LOG_TABLE_SIZE = 512;
+
+Model::Model(
+    std::shared_ptr<Matrix> wi,
+    std::shared_ptr<Matrix> wo,
+    std::shared_ptr<Args> args,
+    int32_t seed)
+    : hidden_(args->dim),
+      output_(wo->size(0)),
+      grad_(args->dim),
+      rng(seed),
+      quant_(false) {
   wi_ = wi;
   wo_ = wo;
   args_ = args;
-  isz_ = wi->m_;
-  osz_ = wo->m_;
+  osz_ = wo->size(0);
   hsz_ = args->dim;
   negpos = 0;
   loss_ = 0.0;
   nexamples_ = 1;
+  t_sigmoid_.reserve(SIGMOID_TABLE_SIZE + 1);
+  t_log_.reserve(LOG_TABLE_SIZE + 1);
+  initSigmoid();
+  initLog();
+}
+
+void Model::setQuantizePointer(std::shared_ptr<QMatrix> qwi,
+                               std::shared_ptr<QMatrix> qwo, bool qout) {
+  qwi_ = qwi;
+  qwo_ = qwo;
+  if (qout) {
+    osz_ = qwo_->getM();
+  }
 }
 
 real Model::binaryLogistic(int32_t target, bool label, real lr) {
-  real score = utils::sigmoid(wo_->dotRow(hidden_, target));
+  real score = sigmoid(wo_->dotRow(hidden_, target));
   real alpha = lr * (real(label) - score);
   grad_.addRow(*wo_, target, alpha);
   wo_->addRow(hidden_, target, alpha);
   if (label) {
-    return -utils::log(score);
+    return -log(score);
   } else {
-    return -utils::log(1.0 - score);
+    return -log(1.0 - score);
   }
 }
 
@@ -68,19 +89,27 @@ real Model::hierarchicalSoftmax(int32_t target, real lr) {
   return loss;
 }
 
+void Model::computeOutputSoftmax(Vector& hidden, Vector& output) const {
+  if (quant_ && args_->qout) {
+    output.mul(*qwo_, hidden);
+  } else {
+    output.mul(*wo_, hidden);
+  }
+  real max = output[0], z = 0.0;
+  for (int32_t i = 0; i < osz_; i++) {
+    max = std::max(output[i], max);
+  }
+  for (int32_t i = 0; i < osz_; i++) {
+    output[i] = exp(output[i] - max);
+    z += output[i];
+  }
+  for (int32_t i = 0; i < osz_; i++) {
+    output[i] /= z;
+  }
+}
+
 void Model::computeOutputSoftmax() {
-  output_.mul(*wo_, hidden_);
-  real max = output_[0], z = 0.0;
-  for (int32_t i = 0; i < osz_; i++) {
-    max = std::max(output_[i], max);
-  }
-  for (int32_t i = 0; i < osz_; i++) {
-    output_[i] = exp(output_[i] - max);
-    z += output_[i];
-  }
-  for (int32_t i = 0; i < osz_; i++) {
-    output_[i] /= z;
-  }
+  computeOutputSoftmax(hidden_, output_);
 }
 
 real Model::softmax(int32_t target, real lr) {
@@ -92,15 +121,20 @@ real Model::softmax(int32_t target, real lr) {
     grad_.addRow(*wo_, i, alpha);
     wo_->addRow(hidden_, i, alpha);
   }
-  return -utils::log(output_[target]);
+  return -log(output_[target]);
 }
 
-void Model::computeHidden(const std::vector<int32_t>& input) {
-  hidden_.zero();
+void Model::computeHidden(const std::vector<int32_t>& input, Vector& hidden) const {
+  assert(hidden.size() == hsz_);
+  hidden.zero();
   for (auto it = input.cbegin(); it != input.cend(); ++it) {
-    hidden_.addRow(*wi_, *it);
+    if(quant_) {
+      hidden.addRow(*qwi_, *it);
+    } else {
+      hidden.addRow(*wi_, *it);
+    }
   }
-  hidden_.mul(1.0 / input.size());
+  hidden.mul(1.0 / input.size());
 }
 
 bool Model::comparePairs(const std::pair<real, int32_t> &l,
@@ -108,26 +142,47 @@ bool Model::comparePairs(const std::pair<real, int32_t> &l,
   return l.first > r.first;
 }
 
-void Model::predict(const std::vector<int32_t>& input, int32_t k,
-                    std::vector<std::pair<real, int32_t>>& heap) {
-  assert(k > 0);
+void Model::predict(const std::vector<int32_t>& input, int32_t k, real threshold,
+                    std::vector<std::pair<real, int32_t>>& heap,
+                    Vector& hidden, Vector& output) const {
+  if (k <= 0) {
+    throw std::invalid_argument("k needs to be 1 or higher!");
+  }
+  if (args_->model != model_name::sup) {
+    throw std::invalid_argument("Model needs to be supervised for prediction!");
+  }
   heap.reserve(k + 1);
-  computeHidden(input);
+  computeHidden(input, hidden);
   if (args_->loss == loss_name::hs) {
-    dfs(k, 2 * osz_ - 2, 0.0, heap);
+    dfs(k, threshold, 2 * osz_ - 2, 0.0, heap, hidden);
   } else {
-    findKBest(k, heap);
+    findKBest(k, threshold, heap, hidden, output);
   }
   std::sort_heap(heap.begin(), heap.end(), comparePairs);
 }
 
-void Model::findKBest(int32_t k, std::vector<std::pair<real, int32_t>>& heap) {
-  computeOutputSoftmax();
+void Model::predict(
+  const std::vector<int32_t>& input,
+  int32_t k,
+  real threshold,
+  std::vector<std::pair<real, int32_t>>& heap
+) {
+  predict(input, k, threshold, heap, hidden_, output_);
+}
+
+void Model::findKBest(
+  int32_t k,
+  real threshold,
+  std::vector<std::pair<real, int32_t>>& heap,
+  Vector& hidden, Vector& output
+) const {
+  computeOutputSoftmax(hidden, output);
   for (int32_t i = 0; i < osz_; i++) {
-    if (heap.size() == k && utils::log(output_[i]) < heap.front().first) {
+    if (output[i] < threshold) continue;
+    if (heap.size() == k && std_log(output[i]) < heap.front().first) {
       continue;
     }
-    heap.push_back(std::make_pair(utils::log(output_[i]), i));
+    heap.push_back(std::make_pair(std_log(output[i]), i));
     std::push_heap(heap.begin(), heap.end(), comparePairs);
     if (heap.size() > k) {
       std::pop_heap(heap.begin(), heap.end(), comparePairs);
@@ -136,8 +191,10 @@ void Model::findKBest(int32_t k, std::vector<std::pair<real, int32_t>>& heap) {
   }
 }
 
-void Model::dfs(int32_t k, int32_t node, real score,
-                std::vector<std::pair<real, int32_t>>& heap) {
+void Model::dfs(int32_t k, real threshold, int32_t node, real score,
+                std::vector<std::pair<real, int32_t>>& heap,
+                Vector& hidden) const {
+  if (score < std_log(threshold)) return;
   if (heap.size() == k && score < heap.front().first) {
     return;
   }
@@ -152,21 +209,23 @@ void Model::dfs(int32_t k, int32_t node, real score,
     return;
   }
 
-  real f = utils::sigmoid(wo_->dotRow(hidden_, node - osz_));
-  dfs(k, tree[node].left, score + utils::log(1.0 - f), heap);
-  dfs(k, tree[node].right, score + utils::log(f), heap);
+  real f;
+  if (quant_ && args_->qout) {
+    f= qwo_->dotRow(hidden, node - osz_);
+  } else {
+    f= wo_->dotRow(hidden, node - osz_);
+  }
+  f = 1. / (1 + std::exp(-f));
+
+  dfs(k, threshold, tree[node].left, score + std_log(1.0 - f), heap, hidden);
+  dfs(k, threshold, tree[node].right, score + std_log(f), heap, hidden);
 }
 
 void Model::update(const std::vector<int32_t>& input, int32_t target, real lr) {
   assert(target >= 0);
   assert(target < osz_);
   if (input.size() == 0) return;
-  hidden_.zero();
-  for (auto it = input.cbegin(); it != input.cend(); ++it) {
-    hidden_.addRow(*wi_, *it);
-  }
-  hidden_.mul(1.0 / input.size());
-
+  computeHidden(input, hidden_);
   if (args_->loss == loss_name::ns) {
     loss_ += negativeSampling(target, lr);
   } else if (args_->loss == loss_name::hs) {
@@ -202,17 +261,17 @@ void Model::initTableNegatives(const std::vector<int64_t>& counts) {
   for (size_t i = 0; i < counts.size(); i++) {
     real c = pow(counts[i], 0.5);
     for (size_t j = 0; j < c * NEGATIVE_TABLE_SIZE / z; j++) {
-      negatives.push_back(i);
+      negatives_.push_back(i);
     }
   }
-  std::shuffle(negatives.begin(), negatives.end(), rng);
+  std::shuffle(negatives_.begin(), negatives_.end(), rng);
 }
 
 int32_t Model::getNegative(int32_t target) {
   int32_t negative;
   do {
-    negative = negatives[negpos];
-    negpos = (negpos + 1) % negatives.size();
+    negative = negatives_[negpos];
+    negpos = (negpos + 1) % negatives_.size();
   } while (target == negative);
   return negative;
 }
@@ -261,6 +320,45 @@ void Model::buildTree(const std::vector<int64_t>& counts) {
   }
 }
 
-real Model::getLoss() {
+real Model::getLoss() const {
   return loss_ / nexamples_;
+}
+
+void Model::initSigmoid() {
+  for (int i = 0; i < SIGMOID_TABLE_SIZE + 1; i++) {
+    real x = real(i * 2 * MAX_SIGMOID) / SIGMOID_TABLE_SIZE - MAX_SIGMOID;
+    t_sigmoid_.push_back(1.0 / (1.0 + std::exp(-x)));
+  }
+}
+
+void Model::initLog() {
+  for (int i = 0; i < LOG_TABLE_SIZE + 1; i++) {
+    real x = (real(i) + 1e-5) / LOG_TABLE_SIZE;
+    t_log_.push_back(std::log(x));
+  }
+}
+
+real Model::log(real x) const {
+  if (x > 1.0) {
+    return 0.0;
+  }
+  int64_t i = int64_t(x * LOG_TABLE_SIZE);
+  return t_log_[i];
+}
+
+real Model::std_log(real x) const {
+  return std::log(x+1e-5);
+}
+
+real Model::sigmoid(real x) const {
+  if (x < -MAX_SIGMOID) {
+    return 0.0;
+  } else if (x > MAX_SIGMOID) {
+    return 1.0;
+  } else {
+    int64_t i = int64_t((x + MAX_SIGMOID) * SIGMOID_TABLE_SIZE / MAX_SIGMOID / 2);
+    return t_sigmoid_[i];
+  }
+}
+
 }

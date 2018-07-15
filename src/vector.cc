@@ -12,64 +12,90 @@
 #include <assert.h>
 
 #include <iomanip>
+#include <cmath>
 
 #include "matrix.h"
-#include "utils.h"
+#include "qmatrix.h"
 
-Vector::Vector(int64_t m) {
-  m_ = m;
-  data_ = new real[m];
-}
+namespace fasttext {
 
-Vector::~Vector() {
-  delete[] data_;
-}
+Vector::Vector(int64_t m) : data_(m) {}
 
 void Vector::zero() {
-  for (int64_t i = 0; i < m_; i++) {
-    data_[i] = 0.0;
+  std::fill(data_.begin(), data_.end(), 0.0);
+}
+
+real Vector::norm() const {
+  real sum = 0;
+  for (int64_t i = 0; i < size(); i++) {
+    sum += data_[i] * data_[i];
   }
+  return std::sqrt(sum);
 }
 
 void Vector::mul(real a) {
-  for (int64_t i = 0; i < m_; i++) {
+  for (int64_t i = 0; i < size(); i++) {
     data_[i] *= a;
+  }
+}
+
+void Vector::addVector(const Vector& source) {
+  assert(size() == source.size());
+  for (int64_t i = 0; i < size(); i++) {
+    data_[i] += source.data_[i];
+  }
+}
+
+void Vector::addVector(const Vector& source, real s) {
+  assert(size() == source.size());
+  for (int64_t i = 0; i < size(); i++) {
+    data_[i] += s * source.data_[i];
   }
 }
 
 void Vector::addRow(const Matrix& A, int64_t i) {
   assert(i >= 0);
-  assert(i < A.m_);
-  assert(m_ == A.n_);
-  for (int64_t j = 0; j < A.n_; j++) {
-    data_[j] += A.data_[i * A.n_ + j];
+  assert(i < A.size(0));
+  assert(size() == A.size(1));
+  for (int64_t j = 0; j < A.size(1); j++) {
+    data_[j] += A.at(i, j);
   }
 }
 
 void Vector::addRow(const Matrix& A, int64_t i, real a) {
   assert(i >= 0);
-  assert(i < A.m_);
-  assert(m_ == A.n_);
-  for (int64_t j = 0; j < A.n_; j++) {
-    data_[j] += a * A.data_[i * A.n_ + j];
+  assert(i < A.size(0));
+  assert(size() == A.size(1));
+  for (int64_t j = 0; j < A.size(1); j++) {
+    data_[j] += a * A.at(i, j);
   }
 }
 
+void Vector::addRow(const QMatrix& A, int64_t i) {
+  assert(i >= 0);
+  A.addToVector(*this, i);
+}
+
 void Vector::mul(const Matrix& A, const Vector& vec) {
-  assert(A.m_ == m_);
-  assert(A.n_ == vec.m_);
-  for (int64_t i = 0; i < m_; i++) {
-    data_[i] = 0.0;
-    for (int64_t j = 0; j < A.n_; j++) {
-      data_[i] += A.data_[i * A.n_ + j] * vec.data_[j];
-    }
+  assert(A.size(0) == size());
+  assert(A.size(1) == vec.size());
+  for (int64_t i = 0; i < size(); i++) {
+    data_[i] = A.dotRow(vec, i);
+  }
+}
+
+void Vector::mul(const QMatrix& A, const Vector& vec) {
+  assert(A.getM() == size());
+  assert(A.getN() == vec.size());
+  for (int64_t i = 0; i < size(); i++) {
+    data_[i] = A.dotRow(vec, i);
   }
 }
 
 int64_t Vector::argmax() {
   real max = data_[0];
   int64_t argmax = 0;
-  for (int64_t i = 1; i < m_; i++) {
+  for (int64_t i = 1; i < size(); i++) {
     if (data_[i] > max) {
       max = data_[i];
       argmax = i;
@@ -78,19 +104,13 @@ int64_t Vector::argmax() {
   return argmax;
 }
 
-real& Vector::operator[](int64_t i) {
-  return data_[i];
-}
-
-const real& Vector::operator[](int64_t i) const {
-  return data_[i];
-}
-
 std::ostream& operator<<(std::ostream& os, const Vector& v)
 {
   os << std::setprecision(5);
-  for (int64_t j = 0; j < v.m_; j++) {
-    os << v.data_[j] << ' ';
+  for (int64_t j = 0; j < v.size(); j++) {
+    os << v[j] << ' ';
   }
   return os;
+}
+
 }
