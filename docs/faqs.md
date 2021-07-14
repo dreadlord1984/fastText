@@ -7,7 +7,7 @@ title:FAQ
 
 FastText is a library for text classification and representation. It transforms text into continuous vectors that can later be used on any language related task. A few tutorials are available.
 
-## Why are my fastText models that big?
+## How can I reduce the size of my fastText models?
 
 fastText uses a hashtable for either word or character ngrams. The size of the hashtable directly impacts the size of a model. To reduce the size of the model, it is possible to reduce the size of this table with the option '-hash'. For example a good value is 20000. Another option that greatly impacts the size of a model is the size of the vectors (-dim). This dimension can be reduced to save space but this can significantly impact performance. If that still produce a model that is too big, one can further reduce the size of a trained model with the quantization option.
 ```bash
@@ -37,7 +37,8 @@ Please note that one of the goal of fastText is to be an efficient CPU tool, all
 
 ## Can I use fastText with python? Or other languages?
 
-There are few unofficial wrappers for python or lua available on github.
+[Python is officially supported](/docs/en/support.html#building-fasttext-python-module).
+There are few unofficial wrappers for javascript, lua and other languages available on github.
 
 ## Can I use fastText with continuous data?
 
@@ -53,3 +54,13 @@ You'll likely see this behavior because your learning rate is too high. Try redu
 
 ## My compiler / architecture can't build fastText. What should I do?
 Try a newer version of your compiler. We try to maintain compatibility with older versions of gcc and many platforms, however sometimes maintaining backwards compatibility becomes very hard. In general, compilers and tool chains that ship with LTS versions of major linux distributions should be fair game. In any case, create an issue with your compiler version and architecture and we'll try to implement compatibility.
+
+## How do I run fastText in a fully reproducible way? Each time I run it I get different results.
+If you run fastText multiple times you'll obtain slightly different results each time due to the optimization algorithm (asynchronous stochastic gradient descent, or Hogwild). If you need to get the same results (e.g. to confront different input params set) you have to set the 'thread' parameter to 1. In this way you'll get exactly the same performances at each run (with the same input params).
+
+
+## Why do I get a probability of 1.00001?
+This is a known rounding issue. You can consider it as 1.0.
+
+## How can I change the dimension of word vectors of a model file?
+If you already trained a model, or downloaded a pre-trained word vectors model, you can adapt the dimension of the word vectors with the `reduce_model.py` script or by calling `fasttext.util.reduce_model` from python, as [described here](/docs/en/crawl-vectors.html#adapt-the-dimension)

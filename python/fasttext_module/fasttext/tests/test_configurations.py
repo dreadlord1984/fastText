@@ -1,9 +1,8 @@
 # Copyright (c) 2017-present, Facebook, Inc.
 # All rights reserved.
 #
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree. An additional grant
-# of patent rights can be found in the PATENTS file in the same directory.
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 from __future__ import absolute_import
 from __future__ import division
@@ -15,7 +14,7 @@ import multiprocessing
 # This script represents a collection of integration tests
 # Each integration test comes with a full set of parameters,
 # a dataset, and expected metrics.
-# These configurations can be used by various fastText apis
+# These configurations can be used by various fastText APIs
 # to confirm some level of correctness.
 
 

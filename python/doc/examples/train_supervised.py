@@ -3,24 +3,23 @@
 # Copyright (c) 2017-present, Facebook, Inc.
 # All rights reserved.
 #
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree. An additional grant
-# of patent rights can be found in the PATENTS file in the same directory.
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from __future__ import division, absolute_import, print_function
 
 import os
-from fastText import train_supervised
+from fasttext import train_supervised
 
 
 def print_results(N, p, r):
     print("N\t" + str(N))
     print("P@{}\t{:.3f}".format(1, p))
     print("R@{}\t{:.3f}".format(1, r))
+
 
 if __name__ == "__main__":
     train_data = os.path.join(os.getenv("DATADIR", ''), 'cooking.train')

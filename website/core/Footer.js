@@ -2,9 +2,8 @@
  * Copyright (c) 2017-present, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 const React = require("react");
@@ -25,6 +24,7 @@ const githubButton = (
 
 class Footer extends React.Component {
   render() {
+    const language = this.props.language || "en";
     const currentYear = new Date().getFullYear();
     return (
       <footer className="nav-footer" id="footer">
@@ -39,7 +39,7 @@ class Footer extends React.Component {
             <h5>Support</h5>
             <a
               href={
-                this.props.config.baseUrl + "docs/" + this.props.language + "/support.html"
+                this.props.config.baseUrl + "docs/" + language + "/support.html"
               }
             >
               Getting Started
@@ -48,7 +48,7 @@ class Footer extends React.Component {
               href={
                 this.props.config.baseUrl +
                 "docs/" +
-                this.props.language +
+                language +
                 "/supervised-tutorial.html"
               }
             >
@@ -58,7 +58,7 @@ class Footer extends React.Component {
               href={
                 this.props.config.baseUrl +
                 "docs/" +
-                this.props.language +
+                language +
                 "/faqs.html"
               }
             >
@@ -68,7 +68,7 @@ class Footer extends React.Component {
               href={
                 this.props.config.baseUrl +
                 "docs/" +
-                this.props.language +
+                language +
                 "/api.html"
               }
             >
@@ -89,12 +89,12 @@ class Footer extends React.Component {
             >
               Stack Overflow
             </a>
-            <a 
-	      href="https://groups.google.com/forum/#!forum/fasttext-library" 
-	      target="_blank"
-	    >
-	      Google Group
-	    </a>
+            <a
+              href="https://groups.google.com/forum/#!forum/fasttext-library"
+              target="_blank"
+            >
+              Google Group
+           </a>
           </div>
           <div>
             <h5>More</h5>

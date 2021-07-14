@@ -3,9 +3,8 @@
 # Copyright (c) 2017-present, Facebook, Inc.
 # All rights reserved.
 #
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree. An additional grant
-# of patent rights can be found in the PATENTS file in the same directory.
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
 
 # NOTE: This requires PyTorch! We do not provide installation scripts to install PyTorch.
 # It is up to you to install this dependency if you want to execute this example.
@@ -21,7 +20,7 @@ import torch
 import random
 import string
 import time
-from fastText import load_model
+from fasttext import load_model
 from torch.autograd import Variable
 
 

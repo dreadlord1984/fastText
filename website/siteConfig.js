@@ -2,9 +2,8 @@
  * Copyright (c) 2017-present, Facebook, Inc.
  * All rights reserved.
  *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree. An additional grant
- * of patent rights can be found in the PATENTS file in the same directory.
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
  */
 
 /* List of projects/orgs using your project for the users page */
@@ -68,7 +67,7 @@ const siteConfig = {
   /* header links for links on this site */
   headerLinks: [
     { doc: "support", label: "Docs" },
-    { doc: "english-vectors", label: "Download" },
+    { doc: "english-vectors", label: "Resources" },
     { blog: true, label: "Blog" },
     {
       href: "https://github.com/facebookresearch/fastText/",
@@ -97,7 +96,10 @@ const siteConfig = {
   /* remove this to disable google analytics tracking */
   gaTrackingId: "UA-44373548-30",
   ogImage: "img/ogimage.png",
-  useEnglishUrl: true
+  useEnglishUrl: true,
+  scripts: [
+    '/tabber.js',
+  ],
 };
 
 module.exports = siteConfig;
